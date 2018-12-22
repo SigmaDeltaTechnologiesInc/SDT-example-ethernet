@@ -27,7 +27,7 @@
  */
 
 #include "mbed.h"
-#include "easy-connect.h"
+#include "EthernetInterface.h"
 
 /* Serial */
 #define BAUDRATE 9600
@@ -41,22 +41,46 @@ DigitalOut do_ledGreen(LED_GREEN, LED_OFF);
 DigitalOut do_ledBlue(LED_BLUE, LED_OFF);
 
 /* Network */
-NetworkInterface* pNetwork;
+EthernetInterface net;
+
+
 
 int main(void) {
     serial_pc.printf("< Sigma Delta Technologies Inc. >\n\r");
 
-    pNetwork = easy_connect(true);    // 1 argument, enable_logging (pass in true to log to serial port)
-    if (!pNetwork) {
-        serial_pc.printf("Connecting to the network failed\n");
-        return 1;
-    }
+    // Bring up the ethernet interface
+    serial_pc.printf("Ethernet socket example\n");
+    net.connect();
+
+    // Show the network address
+    const char *ip = net.get_ip_address();
+    serial_pc.printf("IP address is: %s\n", ip ? ip : "No IP");
+
+    // Open a socket on the network interface, and create a TCP connection to mbed.org
+    TCPSocket socket;
+    socket.open(&net);
+    socket.connect("www.arm.com", 80);
+
+    // Send a simple http request
+    char sbuffer[] = "GET / HTTP/1.1\r\nHost: www.arm.com\r\n\r\n";
+    int scount = socket.send(sbuffer, sizeof sbuffer);
+    serial_pc.printf("sent %d [%.*s]\n", scount, strstr(sbuffer, "\r\n")-sbuffer, sbuffer);
+
+    // Recieve a simple http response and print out the response line
+    char rbuffer[64];
+    int rcount = socket.recv(rbuffer, sizeof rbuffer);
+    serial_pc.printf("recv %d [%.*s]\n", rcount, strstr(rbuffer, "\r\n")-rbuffer, rbuffer);
+
+    // Close the socket to return its memory and bring down the network interface
+    socket.close();
+
+    // Bring down the ethernet interface
+    net.disconnect();
+    serial_pc.printf("Done\n");
 
     while(true) {
         serial_pc.printf("LED Toggle\n");
         do_ledBlue = !do_ledBlue;
         wait(1);                    // 1sec
     }
-
-    return 0;
 }
